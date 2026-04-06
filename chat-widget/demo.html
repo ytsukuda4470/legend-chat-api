@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>介護制度 AIチャット デモ</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 40px 24px;
+      color: #1e293b;
+      background: #f8fafc;
+    }
+    h1 { color: #2563eb; }
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      margin: 16px 0;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    code {
+      background: #f1f5f9;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <h1>介護制度 AIチャット デモ</h1>
+  <p>右下のアイコンをクリックしてAIチャットを試してください。</p>
+  <div class="card">
+    <h2>質問例</h2>
+    <ul>
+      <li>訪問介護の特定事業所加算の要件は？</li>
+      <li>区分支給限度額の計算方法を教えて</li>
+      <li>令和6年度の介護報酬改定のポイントは？</li>
+      <li>居宅介護支援の特定事業所加算IIの要件は？</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h2>業務ポータルへの組み込み方法</h2>
+    <pre>&lt;script&gt;
+  window.LEGEND_CHAT_API_URL = 'https://legend-chat-api-936239225906.asia-northeast1.run.app';
+&lt;/script&gt;
+&lt;script src="https://your-hosting/chat-widget.js"&gt;&lt;/script&gt;</pre>
+  </div>
+
+  <script>
+    window.LEGEND_CHAT_API_URL = 'https://legend-chat-api-936239225906.asia-northeast1.run.app';
+  </script>
+  <script src="./chat-widget.js"></script>
+</body>
+</html>
