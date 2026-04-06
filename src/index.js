@@ -38,6 +38,11 @@ app.get('/embed', (req, res) => {
   res.sendFile(path.join(__dirname, '../chat-widget/embed.html'));
 });
 
+// 介護制度ナレッジ検索UI
+app.get('/knowledge', (req, res) => {
+  res.sendFile(path.join(__dirname, '../chat-widget/knowledge.html'));
+});
+
 // キーワード抽出（Gemini）
 async function extractKeywords(question) {
   const prompt = `以下の介護・ケアマネジャー関連の質問から、Firestoreの全文検索に使用するキーワードを3〜5個抽出してください。\nキーワードはJSON配列形式で返してください。例: [\"訪問介護\", \"特定事業所加算\", \"人員基準\"]\n\n質問: ${question}\n\nキーワードのみJSON配列で返答してください（説明不要）:`;
@@ -153,6 +158,100 @@ async function generateAnswer(question, documents) {
     throw e;
   }
 }
+
+// GET /api/search?q={query}&source={wam|mhlw|all}&limit={number}
+app.get('/api/search', async (req, res) => {
+  const { q, source = 'all', limit: limitParam } = req.query;
+
+  if (!q || typeof q !== 'string' || q.trim().length === 0) {
+    return res.status(400).json({ error: 'クエリパラメータ q は必須です' });
+  }
+  if (!['wam', 'mhlw', 'all'].includes(source)) {
+    return res.status(400).json({ error: 'source は wam / mhlw / all のいずれかを指定してください' });
+  }
+  const limit = Math.min(parseInt(limitParam, 10) || 20, 50);
+
+  // クエリをキーワード分割（スペース・読点・句点で区切り、2文字以上を採用）
+  const keywords = q.trim().split(/[\s　、。]+/).filter(k => k.length >= 2).slice(0, 10);
+  if (keywords.length === 0) {
+    return res.status(400).json({ error: '有効なキーワードが含まれていません' });
+  }
+
+  const allCollections = [
+    { name: 'kaigo_saishinjouhou', source: 'wam',  titleField: 'title', urlField: 'source_url', dateField: 'published_date', volField: 'vol' },
+    { name: 'mhlw_kaigo_minutes',  source: 'mhlw', titleField: 'title', urlField: 'source_url', dateField: 'date',            volField: null },
+  ];
+  const targetCollections = allCollections.filter(
+    col => source === 'all' || col.source === source
+  );
+
+  const results = [];
+  const seenIds = new Set();
+
+  try {
+    for (const col of targetCollections) {
+      try {
+        // relevance: high 優先
+        const highSnapshot = await db.collection(col.name)
+          .where('keywords', 'array-contains-any', keywords)
+          .where('relevance_to_caremanager', '==', 'high')
+          .limit(limit)
+          .get();
+
+        highSnapshot.forEach(doc => {
+          if (!seenIds.has(doc.id)) {
+            seenIds.add(doc.id);
+            const data = doc.data();
+            results.push({
+              id: doc.id,
+              title: data[col.titleField] || data.title || '不明',
+              summary: data.summary || data.description || '',
+              date: data[col.dateField] || data.date || data.published_date || null,
+              source: col.source,
+              url: data[col.urlField] || data.url || '',
+              relevance_score: 0.9,
+            });
+          }
+        });
+
+        // high が limit 未満なら通常関連度でも補充
+        const currentCount = results.filter(r => r.source === col.source).length;
+        if (currentCount < limit) {
+          const normalSnapshot = await db.collection(col.name)
+            .where('keywords', 'array-contains-any', keywords)
+            .limit(limit)
+            .get();
+
+          normalSnapshot.forEach(doc => {
+            if (!seenIds.has(doc.id)) {
+              seenIds.add(doc.id);
+              const data = doc.data();
+              results.push({
+                id: doc.id,
+                title: data[col.titleField] || data.title || '不明',
+                summary: data.summary || data.description || '',
+                date: data[col.dateField] || data.date || data.published_date || null,
+                source: col.source,
+                url: data[col.urlField] || data.url || '',
+                relevance_score: 0.6,
+              });
+            }
+          });
+        }
+      } catch (e) {
+        console.error(`${col.name} 検索エラー:`, e.message);
+      }
+    }
+
+    results.sort((a, b) => b.relevance_score - a.relevance_score);
+    const paged = results.slice(0, limit);
+
+    res.json({ results: paged, total: paged.length, query: q.trim() });
+  } catch (e) {
+    console.error('検索エラー:', e);
+    res.status(500).json({ error: '検索中にエラーが発生しました', detail: e.message });
+  }
+});
 
 // POST /api/chat
 app.post('/api/chat', async (req, res) => {
