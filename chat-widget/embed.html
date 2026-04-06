@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>介護制度AIアシスタント</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: #fff;
+      font-size: 14px;
+      color: #1e293b;
+    }
+    #header {
+      background: #2563eb;
+      color: white;
+      padding: 14px 16px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    #header .icon {
+      font-size: 20px;
+      line-height: 1;
+    }
+    #header .title-area h1 {
+      font-size: 15px;
+      font-weight: 600;
+      margin: 0;
+    }
+    #header .title-area span {
+      font-size: 11px;
+      opacity: 0.8;
+      display: block;
+      margin-top: 2px;
+    }
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      background: #f8fafc;
+    }
+    .msg {
+      max-width: 88%;
+      line-height: 1.6;
+      animation: fadeIn 0.2s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .msg-user {
+      align-self: flex-end;
+      background: #2563eb;
+      color: white;
+      padding: 10px 14px;
+      border-radius: 16px 16px 4px 16px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .msg-ai {
+      align-self: flex-start;
+      background: #ffffff;
+      color: #1e293b;
+      padding: 10px 14px;
+      border-radius: 16px 16px 16px 4px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      word-break: break-word;
+    }
+    .msg-ai .answer-text {
+      white-space: pre-wrap;
+      line-height: 1.7;
+    }
+    .sources-label {
+      margin-top: 10px;
+      font-size: 11px;
+      color: #64748b;
+      font-weight: 600;
+    }
+    .source-card {
+      margin-top: 6px;
+      padding: 8px 10px;
+      border-left: 3px solid #2563eb;
+      background: #eff6ff;
+      border-radius: 0 6px 6px 0;
+      font-size: 12px;
+    }
+    .source-card .source-title {
+      font-weight: 600;
+      color: #1e40af;
+    }
+    .source-card a {
+      color: #1d4ed8;
+      text-decoration: underline;
+    }
+    .source-card .source-summary {
+      color: #374151;
+      font-size: 11px;
+      margin-top: 3px;
+    }
+    .loading {
+      align-self: flex-start;
+      display: flex;
+      gap: 4px;
+      padding: 10px 14px;
+      background: white;
+      border-radius: 16px 16px 16px 4px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .loading span {
+      width: 7px;
+      height: 7px;
+      background: #94a3b8;
+      border-radius: 50%;
+      animation: bounce 1.2s infinite;
+    }
+    .loading span:nth-child(2) { animation-delay: 0.2s; }
+    .loading span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce {
+      0%, 80%, 100% { transform: translateY(0); }
+      40% { transform: translateY(-6px); }
+    }
+    #input-area {
+      display: flex;
+      gap: 8px;
+      padding: 12px;
+      border-top: 1px solid #e2e8f0;
+      background: white;
+      flex-shrink: 0;
+    }
+    #input {
+      flex: 1;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      resize: none;
+      line-height: 1.4;
+      max-height: 80px;
+      overflow-y: auto;
+    }
+    #input:focus { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }
+    #send-btn {
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 14px;
+      cursor: pointer;
+      font-size: 18px;
+      flex-shrink: 0;
+      transition: background 0.15s;
+      line-height: 1;
+    }
+    #send-btn:hover { background: #1d4ed8; }
+    #send-btn:disabled { background: #93c5fd; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <div class="icon">🤖</div>
+    <div class="title-area">
+      <h1>介護制度 AIアシスタント</h1>
+      <span>レジェンドケアマネ powered by Gemini</span>
+    </div>
+  </div>
+  <div id="messages">
+    <div class="msg msg-ai">
+      <div class="answer-text">こんにちは！介護保険制度や加算・算定要件についてご質問ください。最新の通知・審議会資料をもとに回答します。</div>
+    </div>
+  </div>
+  <div id="input-area">
+    <textarea id="input" placeholder="質問を入力（Shift+Enterで改行）" rows="1"></textarea>
+    <button id="send-btn" title="送信">➤</button>
+  </div>
+
+  <script>
+    const API_URL = 'https://legend-chat-api-936239225906.asia-northeast1.run.app/api/chat';
+
+    const messagesEl = document.getElementById('messages');
+    const inputEl = document.getElementById('input');
+    const sendBtn = document.getElementById('send-btn');
+
+    function scrollToBottom() {
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function addUserMessage(text) {
+      const div = document.createElement('div');
+      div.className = 'msg msg-user';
+      div.textContent = text;
+      messagesEl.appendChild(div);
+      scrollToBottom();
+    }
+
+    function showLoading() {
+      const div = document.createElement('div');
+      div.className = 'loading';
+      div.innerHTML = '<span></span><span></span><span></span>';
+      messagesEl.appendChild(div);
+      scrollToBottom();
+      return div;
+    }
+
+    function addAiMessage(answer, sources) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'msg msg-ai';
+
+      const textDiv = document.createElement('div');
+      textDiv.className = 'answer-text';
+      textDiv.textContent = answer;
+      wrapper.appendChild(textDiv);
+
+      if (sources && sources.length > 0) {
+        const label = document.createElement('div');
+        label.className = 'sources-label';
+        label.textContent = `参考資料 (${sources.length}件)`;
+        wrapper.appendChild(label);
+
+        sources.forEach(src => {
+          const card = document.createElement('div');
+          card.className = 'source-card';
+
+          const titleDiv = document.createElement('div');
+          titleDiv.className = 'source-title';
+          const titleText = src.title + (src.vol ? ` Vol.${src.vol}` : '');
+          if (src.url) {
+            const a = document.createElement('a');
+            a.href = src.url;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.textContent = titleText;
+            titleDiv.appendChild(a);
+          } else {
+            titleDiv.textContent = titleText;
+          }
+          card.appendChild(titleDiv);
+
+          if (src.summary) {
+            const sumDiv = document.createElement('div');
+            sumDiv.className = 'source-summary';
+            sumDiv.textContent = src.summary.length > 100 ? src.summary.slice(0, 100) + '…' : src.summary;
+            card.appendChild(sumDiv);
+          }
+          wrapper.appendChild(card);
+        });
+      }
+
+      messagesEl.appendChild(wrapper);
+      scrollToBottom();
+    }
+
+    function addErrorMessage(text) {
+      const div = document.createElement('div');
+      div.className = 'msg msg-ai';
+      const inner = document.createElement('div');
+      inner.className = 'answer-text';
+      inner.style.color = '#ef4444';
+      inner.textContent = text;
+      div.appendChild(inner);
+      messagesEl.appendChild(div);
+      scrollToBottom();
+    }
+
+    async function sendMessage() {
+      const question = inputEl.value.trim();
+      if (!question || sendBtn.disabled) return;
+
+      inputEl.value = '';
+      inputEl.style.height = 'auto';
+      sendBtn.disabled = true;
+
+      addUserMessage(question);
+      const loadingEl = showLoading();
+
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question }),
+        });
+        const data = await res.json();
+        loadingEl.remove();
+
+        if (data.error) {
+          addErrorMessage(`エラー: ${data.error}`);
+        } else {
+          addAiMessage(data.answer, data.sources);
+        }
+      } catch (e) {
+        loadingEl.remove();
+        addErrorMessage('ネットワークエラーが発生しました。しばらくしてから再試行してください。');
+      }
+
+      sendBtn.disabled = false;
+      inputEl.focus();
+    }
+
+    sendBtn.addEventListener('click', sendMessage);
+
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    inputEl.addEventListener('input', () => {
+      inputEl.style.height = 'auto';
+      inputEl.style.height = Math.min(inputEl.scrollHeight, 80) + 'px';
+    });
+  </script>
+</body>
+</html>
