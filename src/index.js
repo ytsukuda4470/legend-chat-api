@@ -1,8 +1,13 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Firebase Admin SDK 初期化（ADC: Cloud Runでは自動認証）
 initializeApp({
@@ -18,19 +23,24 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// 静的ファイル配信（チャットウィジェット）
+app.use('/widget', express.static(path.join(__dirname, '../chat-widget')));
+
 // ヘルスチェック
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'legend-chat-api' });
 });
 
+// Google Sites 埋め込み用ページ
+app.get('/embed', (req, res) => {
+  res.setHeader('X-Frame-Options', 'ALLOWALL');
+  res.setHeader('Content-Security-Policy', "frame-ancestors *");
+  res.sendFile(path.join(__dirname, '../chat-widget/embed.html'));
+});
+
 // キーワード抽出（Gemini）
 async function extractKeywords(question) {
-  const prompt = `以下の介護・ケアマネジャー関連の質問から、Firestoreの全文検索に使用するキーワードを3〜5個抽出してください。
-キーワードはJSON配列形式で返してください。例: ["訪問介護", "特定事業所加算", "人員基準"]
-
-質問: ${question}
-
-キーワードのみJSON配列で返答してください（説明不要）:`;
+  const prompt = `以下の介護・ケアマネジャー関連の質問から、Firestoreの全文検索に使用するキーワードを3〜5個抽出してください。\nキーワードはJSON配列形式で返してください。例: [\"訪問介護\", \"特定事業所加算\", \"人員基準\"]\n\n質問: ${question}\n\nキーワードのみJSON配列で返答してください（説明不要）:`;
 
   try {
     const result = await model.generateContent(prompt);
@@ -127,26 +137,13 @@ async function generateAnswer(question, documents) {
   if (documents.length > 0) {
     context = documents.map((doc, i) => {
       const keyPoints = Array.isArray(doc.key_points) ? doc.key_points.join('\n- ') : '';
-      return `【資料${i + 1}】${doc.title}${doc.vol ? ` (Vol.${doc.vol})` : ''}
-概要: ${doc.summary}
-${keyPoints ? `ポイント:\n- ${keyPoints}` : ''}`;
+      return `【資料${i + 1}】${doc.title}${doc.vol ? ` (Vol.${doc.vol})` : ''}\n概要: ${doc.summary}\n${keyPoints ? `ポイント:\n- ${keyPoints}` : ''}`;
     }).join('\n\n');
   }
 
   const prompt = context
-    ? `あなたは介護保険制度に詳しいケアマネジャー支援AIです。以下の参考資料をもとに、質問に対して正確かつわかりやすく回答してください。
-
-参考資料:
-${context}
-
-質問: ${question}
-
-回答（400字程度、箇条書き可）:`
-    : `あなたは介護保険制度に詳しいケアマネジャー支援AIです。以下の質問に対して、一般的な知識に基づいて回答してください。参考資料は見つかりませんでしたが、できる限り正確な情報を提供してください。
-
-質問: ${question}
-
-回答（400字程度）:`;
+    ? `あなたは介護保険制度に詳しいケアマネジャー支援AIです。以下の参考資料をもとに、質問に対して正確かつわかりやすく回答してください。\n\n参考資料:\n${context}\n\n質問: ${question}\n\n回答（400字程度、箇条書き可）:`
+    : `あなたは介護保険制度に詳しいケアマネジャー支援AIです。以下の質問に対して、一般的な知識に基づいて回答してください。参考資料は見つかりませんでしたが、できる限り正確な情報を提供してください。\n\n質問: ${question}\n\n回答（400字程度）:`;
 
   try {
     const result = await model.generateContent(prompt);
