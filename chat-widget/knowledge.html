@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>介護制度ナレッジ検索 | レジェンドケアマネ</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#0d9488',
+            'primary-dark': '#0f766e',
+            'primary-light': '#ccfbf1',
+            'primary-bg': '#f0fdfa',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif; }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid #ccfbf1;
+      border-top-color: #0d9488;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .card { transition: box-shadow 0.2s, transform 0.2s; }
+    .card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(13,148,136,0.12); }
+    .tab-active { color: #0d9488; border-bottom: 2px solid #0d9488; }
+    .tab-inactive { color: #6b7280; border-bottom: 2px solid transparent; }
+    .badge-wam { background: #d1fae5; color: #065f46; }
+    .badge-mhlw { background: #cffafe; color: #164e63; }
+  </style>
+</head>
+<body class="bg-primary-bg min-h-screen">
+
+  <!-- ヘッダー -->
+  <header class="bg-white border-b border-teal-100 shadow-sm">
+    <div class="max-w-3xl mx-auto px-4 py-4 flex items-center gap-3">
+      <div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white text-sm font-bold">知</div>
+      <div>
+        <h1 class="text-lg font-bold text-primary-dark">介護制度ナレッジ検索</h1>
+        <p class="text-xs text-gray-500">WAM NET介護保険最新情報 + 厚労省議事録 1,340件以上</p>
+      </div>
+      <a href="/embed" class="ml-auto text-xs text-primary hover:underline">💬 チャットで質問する</a>
+    </div>
+  </header>
+
+  <main class="max-w-3xl mx-auto px-4 py-6">
+
+    <!-- 検索ボックス -->
+    <div class="mb-5">
+      <div class="flex gap-2">
+        <input
+          id="searchInput"
+          type="text"
+          placeholder="介護報酬、認知症対応型、訪問介護など..."
+          class="flex-1 px-4 py-3 rounded-lg border-2 border-primary bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:border-primary-dark text-sm"
+          autofocus
+        />
+        <button
+          id="searchBtn"
+          class="px-5 py-3 bg-primary hover:bg-primary-dark text-white rounded-lg font-medium text-sm transition-colors"
+        >検索</button>
+      </div>
+    </div>
+
+    <!-- ソースタブ -->
+    <div class="flex gap-6 mb-5 border-b border-gray-200">
+      <button class="tab-btn tab-active pb-2 text-sm font-medium" data-source="all">すべて</button>
+      <button class="tab-btn tab-inactive pb-2 text-sm font-medium" data-source="wam">WAM NET</button>
+      <button class="tab-btn tab-inactive pb-2 text-sm font-medium" data-source="mhlw">厚労省議事録</button>
+    </div>
+
+    <!-- 結果エリア -->
+    <div id="results">
+      <div class="text-center py-16 text-gray-400">
+        <div class="text-4xl mb-3">🔍</div>
+        <p class="text-sm">キーワードを入力して検索してください</p>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    const API_BASE = '';  // 同じオリジン（Cloud Run）
+    let currentSource = 'all';
+
+    const searchInput = document.getElementById('searchInput');
+    const searchBtn = document.getElementById('searchBtn');
+    const resultsEl = document.getElementById('results');
+
+    // タブ切替
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => {
+          b.className = b.className.replace('tab-active', 'tab-inactive');
+        });
+        btn.className = btn.className.replace('tab-inactive', 'tab-active');
+        currentSource = btn.dataset.source;
+        if (searchInput.value.trim()) search();
+      });
+    });
+
+    searchBtn.addEventListener('click', search);
+    searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
+
+    async function search() {
+      const q = searchInput.value.trim();
+      if (!q) return;
+
+      resultsEl.innerHTML = `
+        <div class="flex flex-col items-center py-16 text-gray-500 gap-3">
+          <div class="spinner"></div>
+          <p class="text-sm">検索中...</p>
+        </div>`;
+
+      try {
+        const params = new URLSearchParams({ q, source: currentSource, limit: 20 });
+        const res = await fetch(`${API_BASE}/api/search?${params}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        renderResults(data);
+      } catch (e) {
+        resultsEl.innerHTML = `
+          <div class="bg-red-50 border-l-4 border-red-400 rounded p-4 text-red-700 text-sm">
+            <strong>エラーが発生しました</strong><br>${escHtml(e.message)}
+          </div>`;
+      }
+    }
+
+    function renderResults({ results, total, query }) {
+      if (!results || results.length === 0) {
+        resultsEl.innerHTML = `
+          <div class="text-center py-16 text-gray-400">
+            <div class="text-4xl mb-3">📭</div>
+            <p class="text-sm">「${escHtml(query)}」に一致する資料が見つかりませんでした</p>
+          </div>`;
+        return;
+      }
+
+      const header = `<p class="text-xs text-gray-500 mb-4">${escHtml(query)} の検索結果: ${total}件</p>`;
+      const cards = results.map(r => {
+        const badgeClass = r.source === 'wam' ? 'badge-wam' : 'badge-mhlw';
+        const badgeLabel = r.source === 'wam' ? 'WAM NET' : '厚労省';
+        const date = r.date ? formatDate(r.date) : '';
+        const summary = r.summary ? escHtml(r.summary.slice(0, 200)) + (r.summary.length > 200 ? '…' : '') : '';
+        const linkHtml = r.url
+          ? `<a href="${escHtml(r.url)}" target="_blank" rel="noopener noreferrer"
+               class="inline-flex items-center gap-1 text-primary hover:text-primary-dark text-xs font-medium mt-3">
+               原文を開く
+               <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                   d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+               </svg>
+             </a>`
+          : '';
+        return `
+          <div class="card bg-white rounded-xl p-4 border border-gray-100 shadow-sm mb-3">
+            <h3 class="font-bold text-gray-800 text-sm leading-snug mb-2">${escHtml(r.title)}</h3>
+            ${summary ? `<p class="text-gray-600 text-xs leading-relaxed mb-2">${summary}</p>` : ''}
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="badge-${r.source} text-xs px-2 py-0.5 rounded font-medium">${badgeLabel}</span>
+              ${date ? `<span class="text-xs text-gray-400">${date}</span>` : ''}
+            </div>
+            ${linkHtml}
+          </div>`;
+      }).join('');
+
+      resultsEl.innerHTML = header + cards;
+    }
+
+    function formatDate(d) {
+      try {
+        const dt = new Date(d);
+        if (isNaN(dt)) return '';
+        return dt.toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' });
+      } catch { return ''; }
+    }
+
+    function escHtml(s) {
+      if (!s) return '';
+      return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+  </script>
+</body>
+</html>
