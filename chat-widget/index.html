@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>レジェンドケアマネ AI ポータル</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#0d9488',
+            'primary-dark': '#0f766e',
+            'primary-light': '#ccfbf1',
+            'primary-bg': '#f0fdfa',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif; }
+    .card { transition: box-shadow 0.2s, transform 0.2s; }
+    .card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(13,148,136,0.15); }
+    .tab-active { color: #0d9488; border-bottom: 2px solid #0d9488; font-weight: 600; }
+    .tab-inactive { color: #6b7280; border-bottom: 2px solid transparent; }
+    .copy-btn:active { transform: scale(0.95); }
+    pre { white-space: pre-wrap; word-break: break-all; }
+    .toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: #0f766e; color: white;
+      padding: 10px 18px; border-radius: 8px;
+      font-size: 13px; z-index: 9999;
+      opacity: 0; transition: opacity 0.3s;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body class="bg-primary-bg min-h-screen">
+
+  <!-- ヘッダー -->
+  <header class="bg-white border-b border-teal-100 shadow-sm">
+    <div class="max-w-4xl mx-auto px-4 py-5 flex items-center gap-4">
+      <div class="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-white text-lg font-bold shadow">伝</div>
+      <div>
+        <h1 class="text-xl font-bold text-primary-dark">レジェンドケアマネ AI ポータル</h1>
+        <p class="text-xs text-gray-500 mt-0.5">介護制度ナレッジ検索・AIチャット・Webhook通知 — 一体型管理ツール</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-4xl mx-auto px-4 py-8">
+
+    <!-- ツールカード一覧 -->
+    <section class="mb-10">
+      <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">利用できるツール</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+        <!-- ナレッジ検索 -->
+        <a href="/knowledge" class="card bg-white rounded-2xl p-5 border border-teal-100 shadow-sm block">
+          <div class="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center text-2xl mb-3">🔍</div>
+          <h3 class="font-bold text-gray-800 text-sm mb-1">介護制度ナレッジ検索</h3>
+          <p class="text-xs text-gray-500 leading-relaxed">WAM NET・厚労省議事録・介護ニュース 1,300件以上をキーワード検索</p>
+          <span class="inline-block mt-3 text-xs text-primary font-medium">開く →</span>
+        </a>
+
+        <!-- AIチャット -->
+        <a href="/embed" class="card bg-white rounded-2xl p-5 border border-teal-100 shadow-sm block">
+          <div class="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center text-2xl mb-3">💬</div>
+          <h3 class="font-bold text-gray-800 text-sm mb-1">介護制度 AIチャット</h3>
+          <p class="text-xs text-gray-500 leading-relaxed">介護保険・ケアプラン・法令に関する質問にAIが回答。Google Sitesへ埋め込み可能</p>
+          <span class="inline-block mt-3 text-xs text-primary font-medium">開く →</span>
+        </a>
+
+        <!-- Webhook管理 -->
+        <a href="/webhooks" class="card bg-white rounded-2xl p-5 border border-teal-100 shadow-sm block">
+          <div class="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center text-2xl mb-3">🔔</div>
+          <h3 class="font-bold text-gray-800 text-sm mb-1">Google Chat 通知設定</h3>
+          <p class="text-xs text-gray-500 leading-relaxed">新着介護ニュースをGoogle Chatに毎日自動通知。SpaceごとにWebhookを登録</p>
+          <span class="inline-block mt-3 text-xs text-primary font-medium">設定する →</span>
+        </a>
+
+      </div>
+    </section>
+
+    <!-- 使い方 & 埋め込みコード -->
+    <section class="bg-white rounded-2xl border border-teal-100 shadow-sm overflow-hidden mb-8">
+      <div class="border-b border-gray-100 px-6 py-4 flex gap-6">
+        <button class="tab-btn tab-active pb-1 text-sm" data-tab="knowledge">ナレッジ検索</button>
+        <button class="tab-btn tab-inactive pb-1 text-sm" data-tab="chat">AIチャット</button>
+        <button class="tab-btn tab-inactive pb-1 text-sm" data-tab="webhook">Webhook通知</button>
+        <button class="tab-btn tab-inactive pb-1 text-sm" data-tab="api">API</button>
+      </div>
+
+      <!-- ナレッジ検索 -->
+      <div id="tab-knowledge" class="p-6">
+        <h3 class="font-bold text-gray-800 mb-3">📖 介護制度ナレッジ検索 — 使い方</h3>
+        <div class="space-y-4 text-sm text-gray-600 mb-6">
+          <div class="flex gap-3">
+            <span class="w-6 h-6 rounded-full bg-primary text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
+            <p>キーワード（例: 「介護報酬」「認知症対応型」「訪問介護」）を入力して検索</p>
+          </div>
+          <div class="flex gap-3">
+            <span class="w-6 h-6 rounded-full bg-primary text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
+            <p>「すべて」「WAM NET」「厚労省議事録」「介護ニュース」タブで絞り込み可能</p>
+          </div>
+          <div class="flex gap-3">
+            <span class="w-6 h-6 rounded-full bg-primary text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
+            <p>「新しい順」「古い順」でソート可能。「原文を開く」で元の資料を確認</p>
+          </div>
+        </div>
+
+        <h4 class="font-semibold text-gray-700 text-sm mb-2">🔗 他のページに貼るリンク</h4>
+        <div class="bg-gray-50 rounded-lg p-3 mb-2 font-mono text-xs text-gray-700 relative">
+          <code id="knowledge-link">https://legend-chat-api-936239225906.asia-northeast1.run.app/knowledge</code>
+        </div>
+        <button onclick="copyText('knowledge-link')" class="copy-btn text-xs text-primary hover:text-primary-dark font-medium">📋 URLをコピー</button>
+
+        <h4 class="font-semibold text-gray-700 text-sm mt-5 mb-2">🖼️ iframeで埋め込む</h4>
+        <div class="bg-gray-50 rounded-lg p-3 mb-2 font-mono text-xs text-gray-700 relative">
+          <pre id="knowledge-iframe">&lt;iframe
+  src="https://legend-chat-api-936239225906.asia-northeast1.run.app/knowledge"
+  width="100%"
+  height="700"
+  frameborder="0"
+  style="border-radius:12px; border:1px solid #d1fae5;"
+&gt;&lt;/iframe&gt;</pre>
+        </div>
+        <button onclick="copyText('knowledge-iframe')" class="copy-btn text-xs text-primary hover:text-primary-dark font-medium">📋 コードをコピー</button>
+      </div>
+
+      <!-- AIチャット -->
+      <div id="tab-chat" class="p-6 hidden">
+        <h3 class="font-bold text-gray-800 mb-3">💬 介護制度 AIチャット — 使い方</h3>
+        <div class="space-y-4 text-sm text-gray-600 mb-6">
+          <div class="flex gap-3">
+            <span class="w-6 h-6 rounded-full bg-primary text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
+            <p>介護保険制度・ケアプラン・法令・加算など、業務上の疑問を自然文で質問</p>
+          </div>
+          <div class="flex gap-3">
+            <span class="w-6 h-6 rounded-full bg-primary text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
+            <p>Firestoreナレッジベース（WAM NET・厚労省議事録）を参照して回答を生成</p>
+          </div>
+          <div class="flex gap-3">
+            <span class="w-6 h-6 rounded-full bg-primary text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
+            <p>Google Sitesや社内ポータルにiframeで埋め込んで利用できます</p>
+          </div>
+        </div>
+
+        <h4 class="font-semibold text-gray-700 text-sm mb-2">🖼️ Google Sites への埋め込みコード</h4>
+        <p class="text-xs text-gray-500 mb-2">Google Sitesの「埋め込み」→「URLを埋め込む」に以下のURLを入力してください。</p>
+        <div class="bg-gray-50 rounded-lg p-3 mb-2 font-mono text-xs text-gray-700">
+          <code id="chat-embed-url">https://legend-chat-api-936239225906.asia-northeast1.run.app/embed</code>
+        </div>
+        <button onclick="copyText('chat-embed-url')" class="copy-btn text-xs text-primary hover:text-primary-dark font-medium">📋 URLをコピー</button>
+
+        <h4 class="font-semibold text-gray-700 text-sm mt-5 mb-2">🌐 HTMLページへの埋め込みコード</h4>
+        <div class="bg-gray-50 rounded-lg p-3 mb-2 font-mono text-xs text-gray-700">
+          <pre id="chat-iframe">&lt;!-- レジェンドケアマネ AIチャット埋め込み --&gt;
+&lt;iframe
+  src="https://legend-chat-api-936239225906.asia-northeast1.run.app/embed"
+  width="100%"
+  height="600"
+  frameborder="0"
+  allow="clipboard-write"
+  style="border-radius:16px; border:1px solid #d1fae5; box-shadow:0 4px 16px rgba(0,0,0,0.08);"
+&gt;&lt;/iframe&gt;</pre>
+        </div>
+        <button onclick="copyText('chat-iframe')" class="copy-btn text-xs text-primary hover:text-primary-dark font-medium">📋 コードをコピー</button>
+
+        <h4 class="font-semibold text-gray-700 text-sm mt-5 mb-2">📦 チャットウィジェット（フローティングボタン）</h4>
+        <p class="text-xs text-gray-500 mb-2">画面右下にチャットボタンを表示するウィジェット形式です。</p>
+        <div class="bg-gray-50 rounded-lg p-3 mb-2 font-mono text-xs text-gray-700">
+          <pre id="chat-widget">&lt;script&gt;
+  window.LEGEND_CHAT_API_URL = 'https://legend-chat-api-936239225906.asia-northeast1.run.app';
+&lt;/script&gt;
+&lt;script src="https://legend-chat-api-936239225906.asia-northeast1.run.app/widget/chat-widget.js"&gt;&lt;/script&gt;</pre>
+        </div>
+        <button onclick="copyText('chat-widget')" class="copy-btn text-xs text-primary hover:text-primary-dark font-medium">📋 コードをコピー</button>
+      </div>
+
+      <!-- Webhook通知 -->
+      <div id="tab-webhook" class="p-6 hidden">
+        <h3 class="font-bold text-gray-800 mb-3">🔔 Google Chat 通知 — 設定手順</h3>
+        <div class="space-y-4 text-sm text-gray-600 mb-6">
+          <div class="flex gap-3">
+            <span class="w-6 h-6 rounded-full bg-primary text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
+            <div>
+              <p class="font-medium text-gray-700 mb-1">Google ChatでWebhook URLを取得</p>
+              <p>通知を受け取りたいSpaceを開く → 「アプリと統合」→「Webhook」→「Webhookを追加」→ URLをコピー</p>
+            </div>
+          </div>
+          <div class="flex gap-3">
+            <span class="w-6 h-6 rounded-full bg-primary text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
+            <div>
+              <p class="font-medium text-gray-700 mb-1">Webhook管理画面で登録</p>
+              <p>Space名・取得したURL・受け取るコンテンツ（WAM NET / 厚労省 / 介護ニュース）を選択して登録</p>
+            </div>
+          </div>
+          <div class="flex gap-3">
+            <span class="w-6 h-6 rounded-full bg-primary text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
+            <div>
+              <p class="font-medium text-gray-700 mb-1">毎朝08:00に自動通知</p>
+              <p>AIが要約した介護ニュース・制度情報がGoogle Chatに届きます。テスト送信で事前確認できます</p>
+            </div>
+          </div>
+        </div>
+        <a href="/webhooks"
+           class="inline-block bg-primary hover:bg-primary-dark text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors">
+          Webhook管理画面を開く →
+        </a>
+      </div>
+
+      <!-- API -->
+      <div id="tab-api" class="p-6 hidden">
+        <h3 class="font-bold text-gray-800 mb-3">🔌 API リファレンス</h3>
+        <p class="text-xs text-gray-500 mb-5">外部システムやスクリプトから直接APIを利用できます。</p>
+
+        <div class="space-y-5">
+
+          <div>
+            <div class="flex items-center gap-2 mb-2">
+              <span class="bg-blue-100 text-blue-700 text-xs font-mono px-2 py-0.5 rounded">GET</span>
+              <code class="text-sm text-gray-700">/api/search</code>
+            </div>
+            <p class="text-xs text-gray-500 mb-2">ナレッジ全文検索</p>
+            <div class="bg-gray-50 rounded-lg p-3 font-mono text-xs text-gray-700 mb-1">
+              <pre id="api-search">GET /api/search?q=訪問介護&amp;source=all&amp;sort=date_desc&amp;limit=20&amp;offset=0
+
+# source: all | wam | mhlw | news
+# sort: relevance | date_desc | date_asc</pre>
+            </div>
+            <button onclick="copyText('api-search')" class="copy-btn text-xs text-primary hover:text-primary-dark font-medium">📋 コピー</button>
+          </div>
+
+          <div>
+            <div class="flex items-center gap-2 mb-2">
+              <span class="bg-green-100 text-green-700 text-xs font-mono px-2 py-0.5 rounded">POST</span>
+              <code class="text-sm text-gray-700">/api/chat</code>
+            </div>
+            <p class="text-xs text-gray-500 mb-2">AIチャット（Gemini + RAG）</p>
+            <div class="bg-gray-50 rounded-lg p-3 font-mono text-xs text-gray-700 mb-1">
+              <pre id="api-chat">POST /api/chat
+Content-Type: application/json
+
+{
+  "message": "訪問介護の人員基準を教えて"
+}</pre>
+            </div>
+            <button onclick="copyText('api-chat')" class="copy-btn text-xs text-primary hover:text-primary-dark font-medium">📋 コピー</button>
+          </div>
+
+          <div>
+            <div class="flex items-center gap-2 mb-2">
+              <span class="bg-blue-100 text-blue-700 text-xs font-mono px-2 py-0.5 rounded">GET</span>
+              <code class="text-sm text-gray-700">/api/webhooks</code>
+            </div>
+            <p class="text-xs text-gray-500 mb-2">登録済みWebhook一覧取得</p>
+            <div class="bg-gray-50 rounded-lg p-3 font-mono text-xs text-gray-700 mb-1">
+              <pre id="api-webhooks">GET /api/webhooks</pre>
+            </div>
+            <button onclick="copyText('api-webhooks')" class="copy-btn text-xs text-primary hover:text-primary-dark font-medium">📋 コピー</button>
+          </div>
+
+          <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 text-xs text-amber-800">
+            <strong>ベースURL:</strong>
+            <code class="block mt-1">https://legend-chat-api-936239225906.asia-northeast1.run.app</code>
+          </div>
+
+        </div>
+      </div>
+
+    </section>
+
+    <!-- フッター -->
+    <footer class="text-center text-xs text-gray-400 pb-6">
+      レジェンドケアマネ AI ポータル — 株式会社279
+    </footer>
+
+  </main>
+
+  <div id="toast" class="toast">コピーしました</div>
+
+  <script>
+    // タブ切替
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => {
+          b.className = b.className.replace('tab-active', 'tab-inactive');
+        });
+        btn.className = btn.className.replace('tab-inactive', 'tab-active');
+        document.querySelectorAll('[id^="tab-"]').forEach(el => el.classList.add('hidden'));
+        document.getElementById('tab-' + btn.dataset.tab).classList.remove('hidden');
+      });
+    });
+
+    // コピー
+    function copyText(id) {
+      const el = document.getElementById(id);
+      navigator.clipboard.writeText(el.textContent.trim()).then(() => showToast());
+    }
+
+    function showToast() {
+      const t = document.getElementById('toast');
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2000);
+    }
+  </script>
+</body>
+</html>

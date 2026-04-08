@@ -42,6 +42,11 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'legend-chat-api' });
 });
 
+// ポータルトップページ
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '../chat-widget/index.html'));
+});
+
 // Google Sites 埋め込み用ページ
 app.get('/embed', (req, res) => {
   res.setHeader('X-Frame-Options', 'ALLOWALL');
