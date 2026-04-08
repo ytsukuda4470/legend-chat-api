@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import { rateLimit } from 'express-rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
@@ -22,6 +23,16 @@ const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// レート制限: 1分間に60リクエストまで
+const limiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'リクエストが多すぎます。しばらくしてから再度お試しください。' },
+});
+app.use('/api/', limiter);
 
 // 静的ファイル配信（チャットウィジェット）
 app.use('/widget', express.static(path.join(__dirname, '../chat-widget')));
@@ -286,6 +297,94 @@ app.post('/api/chat', async (req, res) => {
     console.error('チャットエラー:', e);
     res.status(500).json({ error: '回答生成中にエラーが発生しました', detail: e.message });
   }
+});
+
+// GET /api/search
+app.get('/api/search', async (req, res) => {
+  const {
+    q,
+    category,
+    relevance,
+    source = 'all',
+    limit: limitParam = '20',
+    offset: offsetParam = '0',
+  } = req.query;
+
+  const limit = Math.min(parseInt(limitParam, 10) || 20, 50);
+  const offset = parseInt(offsetParam, 10) || 0;
+
+  // キーワード配列（スペース区切り、最大10件）
+  const keywords = q
+    ? q.split(/[\s　]+/).filter(k => k.length >= 1).slice(0, 10)
+    : [];
+
+  const collections = [];
+  if (source === 'kaigo' || source === 'all') {
+    collections.push({ name: 'kaigo_saishinjouhou', sourceLabel: 'kaigo' });
+  }
+  if (source === 'mhlw' || source === 'all') {
+    collections.push({ name: 'mhlw_kaigo_minutes', sourceLabel: 'mhlw' });
+  }
+
+  const allResults = [];
+
+  for (const col of collections) {
+    try {
+      let query = db.collection(col.name);
+
+      if (keywords.length > 0) {
+        query = query.where('keywords', 'array-contains-any', keywords);
+      }
+
+      if (category) {
+        query = query.where('category', '==', category);
+      }
+
+      if (relevance === 'high' && col.name === 'kaigo_saishinjouhou') {
+        query = query.where('relevance_to_caremanager', '==', 'high');
+      }
+
+      query = query.orderBy('date', 'desc').limit(offset + limit);
+
+      const snapshot = await query.get();
+      let i = 0;
+      snapshot.forEach(doc => {
+        if (i < offset) { i++; return; }
+        const data = doc.data();
+        allResults.push({
+          id: doc.id,
+          vol: col.name === 'kaigo_saishinjouhou' ? (data.vol || null) : undefined,
+          date: data.date || '',
+          title: data.title || '',
+          summary: data.summary || data.description || '',
+          key_points: data.key_points || [],
+          keywords: data.keywords || [],
+          category: data.category || '',
+          relevance_to_caremanager: col.name === 'kaigo_saishinjouhou' ? (data.relevance_to_caremanager || '') : undefined,
+          url: data.source_url || data.url || '',
+          source: col.sourceLabel,
+        });
+        i++;
+      });
+    } catch (e) {
+      console.error(`${col.name} 検索エラー:`, e.message);
+    }
+  }
+
+  // source=all の場合は date 降順でマージ
+  allResults.sort((a, b) => {
+    if (a.date > b.date) return -1;
+    if (a.date < b.date) return 1;
+    return 0;
+  });
+
+  const results = allResults.slice(0, limit);
+
+  res.json({
+    results,
+    total: allResults.length,
+    query: q || '',
+  });
 });
 
 const PORT = process.env.PORT || 8080;

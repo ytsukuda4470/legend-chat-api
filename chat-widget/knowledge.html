@@ -47,7 +47,6 @@
         <h1 class="text-lg font-bold text-primary-dark">介護制度ナレッジ検索</h1>
         <p class="text-xs text-gray-500">WAM NET介護保険最新情報 + 厚労省議事録 1,340件以上</p>
       </div>
-      <a href="/embed" class="ml-auto text-xs text-primary hover:underline">💬 チャットで質問する</a>
     </div>
   </header>
 
@@ -85,15 +84,39 @@
       </div>
     </div>
 
+    <!-- ページネーション -->
+    <div id="pagination" class="hidden flex items-center justify-center gap-3 mt-6">
+      <button id="prevBtn"
+        class="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+        disabled>← 前へ</button>
+      <span id="pageInfo" class="text-xs text-gray-500"></span>
+      <button id="nextBtn"
+        class="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+        disabled>次へ →</button>
+    </div>
+
   </main>
 
   <script>
-    const API_BASE = '';  // 同じオリジン（Cloud Run）
+    // ==============================
+    // 設定（別環境に配置する場合はここだけ変更）
+    // ==============================
+    const API_BASE = 'https://legend-chat-api-936239225906.asia-northeast1.run.app';
+    const LIMIT = 20;
+    // ==============================
+
     let currentSource = 'all';
+    let currentOffset = 0;
+    let currentTotal = 0;
+    let currentQuery = '';
 
     const searchInput = document.getElementById('searchInput');
     const searchBtn = document.getElementById('searchBtn');
     const resultsEl = document.getElementById('results');
+    const paginationEl = document.getElementById('pagination');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const pageInfoEl = document.getElementById('pageInfo');
 
     // タブ切替
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -103,29 +126,38 @@
         });
         btn.className = btn.className.replace('tab-inactive', 'tab-active');
         currentSource = btn.dataset.source;
-        if (searchInput.value.trim()) search();
+        if (searchInput.value.trim()) {
+          currentOffset = 0;
+          search();
+        }
       });
     });
 
-    searchBtn.addEventListener('click', search);
-    searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
+    searchBtn.addEventListener('click', () => { currentOffset = 0; search(); });
+    searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') { currentOffset = 0; search(); } });
+    prevBtn.addEventListener('click', () => { currentOffset = Math.max(0, currentOffset - LIMIT); search(); });
+    nextBtn.addEventListener('click', () => { currentOffset += LIMIT; search(); });
 
     async function search() {
       const q = searchInput.value.trim();
       if (!q) return;
+      currentQuery = q;
 
       resultsEl.innerHTML = `
         <div class="flex flex-col items-center py-16 text-gray-500 gap-3">
           <div class="spinner"></div>
           <p class="text-sm">検索中...</p>
         </div>`;
+      paginationEl.classList.add('hidden');
 
       try {
-        const params = new URLSearchParams({ q, source: currentSource, limit: 20 });
+        const params = new URLSearchParams({ q, source: currentSource, limit: LIMIT, offset: currentOffset });
         const res = await fetch(`${API_BASE}/api/search?${params}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
+        currentTotal = data.total || 0;
         renderResults(data);
+        updatePagination();
       } catch (e) {
         resultsEl.innerHTML = `
           <div class="bg-red-50 border-l-4 border-red-400 rounded p-4 text-red-700 text-sm">
@@ -144,7 +176,9 @@
         return;
       }
 
-      const header = `<p class="text-xs text-gray-500 mb-4">${escHtml(query)} の検索結果: ${total}件</p>`;
+      const from = currentOffset + 1;
+      const to = currentOffset + results.length;
+      const header = `<p class="text-xs text-gray-500 mb-4">${escHtml(query)} の検索結果: ${total}件中 ${from}〜${to}件</p>`;
       const cards = results.map(r => {
         const badgeClass = r.source === 'wam' ? 'badge-wam' : 'badge-mhlw';
         const badgeLabel = r.source === 'wam' ? 'WAM NET' : '厚労省';
@@ -173,6 +207,19 @@
       }).join('');
 
       resultsEl.innerHTML = header + cards;
+    }
+
+    function updatePagination() {
+      if (currentTotal <= LIMIT) {
+        paginationEl.classList.add('hidden');
+        return;
+      }
+      paginationEl.classList.remove('hidden');
+      const currentPage = Math.floor(currentOffset / LIMIT) + 1;
+      const totalPages = Math.ceil(currentTotal / LIMIT);
+      pageInfoEl.textContent = `${currentPage} / ${totalPages} ページ`;
+      prevBtn.disabled = currentOffset === 0;
+      nextBtn.disabled = currentOffset + LIMIT >= currentTotal;
     }
 
     function formatDate(d) {
