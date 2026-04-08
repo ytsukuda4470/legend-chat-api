@@ -16,14 +16,26 @@
       color: #1e293b;
     }
     #header {
-      background: #2563eb;
+      background: #0d9488;
       color: white;
-      padding: 14px 16px;
+      padding: 10px 16px;
       flex-shrink: 0;
       display: flex;
       align-items: center;
       gap: 10px;
     }
+    #back-link {
+      color: rgba(255,255,255,0.75);
+      font-size: 12px;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      margin-right: 4px;
+      flex-shrink: 0;
+    }
+    #back-link:hover { color: #fff; }
+    #back-link svg { width: 14px; height: 14px; }
     #header .icon {
       font-size: 20px;
       line-height: 1;
@@ -59,7 +71,7 @@
     }
     .msg-user {
       align-self: flex-end;
-      background: #2563eb;
+      background: #0d9488;
       color: white;
       padding: 10px 14px;
       border-radius: 16px 16px 4px 16px;
@@ -88,17 +100,17 @@
     .source-card {
       margin-top: 6px;
       padding: 8px 10px;
-      border-left: 3px solid #2563eb;
-      background: #eff6ff;
+      border-left: 3px solid #0d9488;
+      background: #f0fdfa;
       border-radius: 0 6px 6px 0;
       font-size: 12px;
     }
     .source-card .source-title {
       font-weight: 600;
-      color: #1e40af;
+      color: #0f766e;
     }
     .source-card a {
-      color: #1d4ed8;
+      color: #0f766e;
       text-decoration: underline;
     }
     .source-card .source-summary {
@@ -149,9 +161,9 @@
       max-height: 80px;
       overflow-y: auto;
     }
-    #input:focus { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }
+    #input:focus { border-color: #0d9488; box-shadow: 0 0 0 2px rgba(13,148,136,0.15); }
     #send-btn {
-      background: #2563eb;
+      background: #0d9488;
       color: white;
       border: none;
       border-radius: 8px;
@@ -162,12 +174,16 @@
       transition: background 0.15s;
       line-height: 1;
     }
-    #send-btn:hover { background: #1d4ed8; }
-    #send-btn:disabled { background: #93c5fd; cursor: not-allowed; }
+    #send-btn:hover { background: #0f766e; }
+    #send-btn:disabled { background: #99f6e4; cursor: not-allowed; }
   </style>
 </head>
 <body>
   <div id="header">
+    <a href="/" id="back-link">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      ポータル
+    </a>
     <div class="icon">🤖</div>
     <div class="title-area">
       <h1>介護制度 AIアシスタント</h1>
