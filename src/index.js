@@ -194,6 +194,7 @@ app.get('/api/search', async (req, res) => {
   const allCollections = [
     { name: 'kaigo_saishinjouhou', source: 'wam'  },
     { name: 'mhlw_kaigo_minutes',  source: 'mhlw' },
+    { name: 'kaigo_news',          source: 'news' },
   ];
   const targetCollections = allCollections.filter(
     col => source === 'all' || col.source === source
@@ -205,38 +206,65 @@ app.get('/api/search', async (req, res) => {
   try {
     for (const col of targetCollections) {
       try {
-        // relevance: high 優先で取得
-        const highSnap = await db.collection(col.name)
-          .where('keywords', 'array-contains-any', keywords)
-          .where('relevance_to_caremanager', '==', 'high')
-          .limit(offset + limit)
-          .get();
-
-        highSnap.forEach(doc => {
-          if (!seenIds.has(doc.id)) {
-            seenIds.add(doc.id);
-            const d = doc.data();
-            allResults.push({
-              id: doc.id,
-              title: d.title || '不明',
-              summary: d.summary || d.description || '',
-              date: d.date || '',
-              vol: col.name === 'kaigo_saishinjouhou' ? (d.vol || null) : null,
-              source: col.source,
-              url: d.url || '',
-              relevance_score: 0.9,
-            });
-          }
-        });
-
-        // high が足りなければ通常関連度でも補充
-        if (allResults.filter(r => r.source === col.source).length < offset + limit) {
-          const normalSnap = await db.collection(col.name)
+        if (col.source === 'news') {
+          // kaigo_news は care_manager_impact フィールドを使用
+          const highSnap = await db.collection(col.name)
             .where('keywords', 'array-contains-any', keywords)
+            .where('care_manager_impact', '==', 'high')
             .limit(offset + limit)
             .get();
 
-          normalSnap.forEach(doc => {
+          highSnap.forEach(doc => {
+            if (!seenIds.has(doc.id)) {
+              seenIds.add(doc.id);
+              const d = doc.data();
+              allResults.push({
+                id: doc.id,
+                title: d.title || '不明',
+                summary: d.summary || '',
+                date: d.date || '',
+                vol: null,
+                source: col.source,
+                url: d.url || '',
+                relevance_score: 0.9,
+              });
+            }
+          });
+
+          if (allResults.filter(r => r.source === col.source).length < offset + limit) {
+            const normalSnap = await db.collection(col.name)
+              .where('keywords', 'array-contains-any', keywords)
+              .limit(offset + limit)
+              .get();
+
+            normalSnap.forEach(doc => {
+              if (!seenIds.has(doc.id)) {
+                seenIds.add(doc.id);
+                const d = doc.data();
+                const impact = d.care_manager_impact || 'low';
+                const score = impact === 'high' ? 0.9 : impact === 'medium' ? 0.7 : 0.5;
+                allResults.push({
+                  id: doc.id,
+                  title: d.title || '不明',
+                  summary: d.summary || '',
+                  date: d.date || '',
+                  vol: null,
+                  source: col.source,
+                  url: d.url || '',
+                  relevance_score: score,
+                });
+              }
+            });
+          }
+        } else {
+          // kaigo_saishinjouhou / mhlw_kaigo_minutes は relevance_to_caremanager を使用
+          const highSnap = await db.collection(col.name)
+            .where('keywords', 'array-contains-any', keywords)
+            .where('relevance_to_caremanager', '==', 'high')
+            .limit(offset + limit)
+            .get();
+
+          highSnap.forEach(doc => {
             if (!seenIds.has(doc.id)) {
               seenIds.add(doc.id);
               const d = doc.data();
@@ -248,10 +276,35 @@ app.get('/api/search', async (req, res) => {
                 vol: col.name === 'kaigo_saishinjouhou' ? (d.vol || null) : null,
                 source: col.source,
                 url: d.url || '',
-                relevance_score: 0.6,
+                relevance_score: 0.9,
               });
             }
           });
+
+          // high が足りなければ通常関連度でも補充
+          if (allResults.filter(r => r.source === col.source).length < offset + limit) {
+            const normalSnap = await db.collection(col.name)
+              .where('keywords', 'array-contains-any', keywords)
+              .limit(offset + limit)
+              .get();
+
+            normalSnap.forEach(doc => {
+              if (!seenIds.has(doc.id)) {
+                seenIds.add(doc.id);
+                const d = doc.data();
+                allResults.push({
+                  id: doc.id,
+                  title: d.title || '不明',
+                  summary: d.summary || d.description || '',
+                  date: d.date || '',
+                  vol: col.name === 'kaigo_saishinjouhou' ? (d.vol || null) : null,
+                  source: col.source,
+                  url: d.url || '',
+                  relevance_score: 0.6,
+                });
+              }
+            });
+          }
         }
       } catch (e) {
         console.error(`${col.name} 検索エラー:`, e.message);

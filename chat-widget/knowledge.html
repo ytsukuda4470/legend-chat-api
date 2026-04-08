@@ -35,6 +35,7 @@
     .tab-inactive { color: #6b7280; border-bottom: 2px solid transparent; }
     .badge-wam { background: #d1fae5; color: #065f46; }
     .badge-mhlw { background: #cffafe; color: #164e63; }
+    .badge-news { background: #fef3c7; color: #92400e; }
   </style>
 </head>
 <body class="bg-primary-bg min-h-screen">
@@ -75,6 +76,7 @@
         <button class="tab-btn tab-active pb-2 text-sm font-medium" data-source="all">すべて</button>
         <button class="tab-btn tab-inactive pb-2 text-sm font-medium" data-source="wam">WAM NET</button>
         <button class="tab-btn tab-inactive pb-2 text-sm font-medium" data-source="mhlw">厚労省議事録</button>
+        <button class="tab-btn tab-inactive pb-2 text-sm font-medium" data-source="news">介護ニュース</button>
       </div>
       <select id="sortSelect" class="mb-1 text-xs border border-gray-300 rounded px-2 py-1 text-gray-600 focus:outline-none focus:border-primary">
         <option value="relevance">関連度順</option>
@@ -191,8 +193,8 @@
       const to = currentOffset + results.length;
       const header = `<p class="text-xs text-gray-500 mb-4">${escHtml(query)} の検索結果: ${total}件中 ${from}〜${to}件</p>`;
       const cards = results.map(r => {
-        const badgeClass = r.source === 'wam' ? 'badge-wam' : 'badge-mhlw';
-        const badgeLabel = r.source === 'wam' ? 'WAM NET' : '厚労省';
+        const badgeClass = r.source === 'wam' ? 'badge-wam' : r.source === 'news' ? 'badge-news' : 'badge-mhlw';
+        const badgeLabel = r.source === 'wam' ? 'WAM NET' : r.source === 'news' ? '介護ニュース' : '厚労省';
         const date = r.date ? formatDate(r.date) : '';
         const summary = r.summary ? escHtml(r.summary.slice(0, 200)) + (r.summary.length > 200 ? '…' : '') : '';
         const linkHtml = r.url
