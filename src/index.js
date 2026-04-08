@@ -170,80 +170,84 @@ async function generateAnswer(question, documents) {
   }
 }
 
-// GET /api/search?q={query}&source={wam|mhlw|all}&limit={number}
+// GET /api/search?q=...&source=all|wam|mhlw&sort=date_desc|date_asc|relevance&limit=20&offset=0
 app.get('/api/search', async (req, res) => {
-  const { q, source = 'all', limit: limitParam } = req.query;
+  const {
+    q,
+    source = 'all',
+    sort = 'relevance',
+    limit: limitParam = '20',
+    offset: offsetParam = '0',
+  } = req.query;
 
   if (!q || typeof q !== 'string' || q.trim().length === 0) {
     return res.status(400).json({ error: 'クエリパラメータ q は必須です' });
   }
-  if (!['wam', 'mhlw', 'all'].includes(source)) {
-    return res.status(400).json({ error: 'source は wam / mhlw / all のいずれかを指定してください' });
-  }
   const limit = Math.min(parseInt(limitParam, 10) || 20, 50);
+  const offset = Math.max(parseInt(offsetParam, 10) || 0, 0);
 
-  // クエリをキーワード分割（スペース・読点・句点で区切り、2文字以上を採用）
-  const keywords = q.trim().split(/[\s　、。]+/).filter(k => k.length >= 2).slice(0, 10);
+  const keywords = q.trim().split(/[\s　、。]+/).filter(k => k.length >= 1).slice(0, 10);
   if (keywords.length === 0) {
     return res.status(400).json({ error: '有効なキーワードが含まれていません' });
   }
 
   const allCollections = [
-    { name: 'kaigo_saishinjouhou', source: 'wam',  titleField: 'title', urlField: 'source_url', dateField: 'published_date', volField: 'vol' },
-    { name: 'mhlw_kaigo_minutes',  source: 'mhlw', titleField: 'title', urlField: 'source_url', dateField: 'date',            volField: null },
+    { name: 'kaigo_saishinjouhou', source: 'wam'  },
+    { name: 'mhlw_kaigo_minutes',  source: 'mhlw' },
   ];
   const targetCollections = allCollections.filter(
     col => source === 'all' || col.source === source
   );
 
-  const results = [];
+  const allResults = [];
   const seenIds = new Set();
 
   try {
     for (const col of targetCollections) {
       try {
-        // relevance: high 優先
-        const highSnapshot = await db.collection(col.name)
+        // relevance: high 優先で取得
+        const highSnap = await db.collection(col.name)
           .where('keywords', 'array-contains-any', keywords)
           .where('relevance_to_caremanager', '==', 'high')
-          .limit(limit)
+          .limit(offset + limit)
           .get();
 
-        highSnapshot.forEach(doc => {
+        highSnap.forEach(doc => {
           if (!seenIds.has(doc.id)) {
             seenIds.add(doc.id);
-            const data = doc.data();
-            results.push({
+            const d = doc.data();
+            allResults.push({
               id: doc.id,
-              title: data[col.titleField] || data.title || '不明',
-              summary: data.summary || data.description || '',
-              date: data[col.dateField] || data.date || data.published_date || null,
+              title: d.title || '不明',
+              summary: d.summary || d.description || '',
+              date: d.date || '',
+              vol: col.name === 'kaigo_saishinjouhou' ? (d.vol || null) : null,
               source: col.source,
-              url: data[col.urlField] || data.url || '',
+              url: d.url || '',
               relevance_score: 0.9,
             });
           }
         });
 
-        // high が limit 未満なら通常関連度でも補充
-        const currentCount = results.filter(r => r.source === col.source).length;
-        if (currentCount < limit) {
-          const normalSnapshot = await db.collection(col.name)
+        // high が足りなければ通常関連度でも補充
+        if (allResults.filter(r => r.source === col.source).length < offset + limit) {
+          const normalSnap = await db.collection(col.name)
             .where('keywords', 'array-contains-any', keywords)
-            .limit(limit)
+            .limit(offset + limit)
             .get();
 
-          normalSnapshot.forEach(doc => {
+          normalSnap.forEach(doc => {
             if (!seenIds.has(doc.id)) {
               seenIds.add(doc.id);
-              const data = doc.data();
-              results.push({
+              const d = doc.data();
+              allResults.push({
                 id: doc.id,
-                title: data[col.titleField] || data.title || '不明',
-                summary: data.summary || data.description || '',
-                date: data[col.dateField] || data.date || data.published_date || null,
+                title: d.title || '不明',
+                summary: d.summary || d.description || '',
+                date: d.date || '',
+                vol: col.name === 'kaigo_saishinjouhou' ? (d.vol || null) : null,
                 source: col.source,
-                url: data[col.urlField] || data.url || '',
+                url: d.url || '',
                 relevance_score: 0.6,
               });
             }
@@ -254,137 +258,24 @@ app.get('/api/search', async (req, res) => {
       }
     }
 
-    results.sort((a, b) => b.relevance_score - a.relevance_score);
-    const paged = results.slice(0, limit);
+    // ソート
+    if (sort === 'date_desc') {
+      allResults.sort((a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : 0));
+    } else if (sort === 'date_asc') {
+      allResults.sort((a, b) => (a.date > b.date ? 1 : a.date < b.date ? -1 : 0));
+    } else {
+      // relevance（デフォルト）
+      allResults.sort((a, b) => b.relevance_score - a.relevance_score);
+    }
 
-    res.json({ results: paged, total: paged.length, query: q.trim() });
+    const total = allResults.length;
+    const results = allResults.slice(offset, offset + limit);
+
+    res.json({ results, total, query: q.trim() });
   } catch (e) {
     console.error('検索エラー:', e);
     res.status(500).json({ error: '検索中にエラーが発生しました', detail: e.message });
   }
-});
-
-// POST /api/chat
-app.post('/api/chat', async (req, res) => {
-  const { question } = req.body;
-
-  if (!question || typeof question !== 'string' || question.trim().length === 0) {
-    return res.status(400).json({ error: '質問を入力してください' });
-  }
-
-  try {
-    // Step 1: キーワード抽出
-    const keywords = await extractKeywords(question);
-    console.log('抽出キーワード:', keywords);
-
-    // Step 2: Firestore検索
-    const documents = await searchDocuments(keywords);
-    console.log(`検索結果: ${documents.length}件`);
-
-    // Step 3: RAG回答生成
-    const answer = await generateAnswer(question, documents);
-
-    // Step 4: sources整形
-    const sources = documents.map(doc => ({
-      title: doc.title,
-      url: doc.url,
-      vol: doc.vol,
-      summary: doc.summary,
-    }));
-
-    res.json({ answer, sources, keywords });
-  } catch (e) {
-    console.error('チャットエラー:', e);
-    res.status(500).json({ error: '回答生成中にエラーが発生しました', detail: e.message });
-  }
-});
-
-// GET /api/search
-app.get('/api/search', async (req, res) => {
-  const {
-    q,
-    category,
-    relevance,
-    source = 'all',
-    limit: limitParam = '20',
-    offset: offsetParam = '0',
-  } = req.query;
-
-  const limit = Math.min(parseInt(limitParam, 10) || 20, 50);
-  const offset = parseInt(offsetParam, 10) || 0;
-
-  // キーワード配列（スペース区切り、最大10件）
-  const keywords = q
-    ? q.split(/[\s　]+/).filter(k => k.length >= 1).slice(0, 10)
-    : [];
-
-  const collections = [];
-  if (source === 'kaigo' || source === 'all') {
-    collections.push({ name: 'kaigo_saishinjouhou', sourceLabel: 'kaigo' });
-  }
-  if (source === 'mhlw' || source === 'all') {
-    collections.push({ name: 'mhlw_kaigo_minutes', sourceLabel: 'mhlw' });
-  }
-
-  const allResults = [];
-
-  for (const col of collections) {
-    try {
-      let query = db.collection(col.name);
-
-      if (keywords.length > 0) {
-        query = query.where('keywords', 'array-contains-any', keywords);
-      }
-
-      if (category) {
-        query = query.where('category', '==', category);
-      }
-
-      if (relevance === 'high' && col.name === 'kaigo_saishinjouhou') {
-        query = query.where('relevance_to_caremanager', '==', 'high');
-      }
-
-      query = query.orderBy('date', 'desc').limit(offset + limit);
-
-      const snapshot = await query.get();
-      let i = 0;
-      snapshot.forEach(doc => {
-        if (i < offset) { i++; return; }
-        const data = doc.data();
-        allResults.push({
-          id: doc.id,
-          vol: col.name === 'kaigo_saishinjouhou' ? (data.vol || null) : undefined,
-          date: data.date || '',
-          title: data.title || '',
-          summary: data.summary || data.description || '',
-          key_points: data.key_points || [],
-          keywords: data.keywords || [],
-          category: data.category || '',
-          relevance_to_caremanager: col.name === 'kaigo_saishinjouhou' ? (data.relevance_to_caremanager || '') : undefined,
-          url: data.source_url || data.url || '',
-          source: col.sourceLabel,
-        });
-        i++;
-      });
-    } catch (e) {
-      console.error(`${col.name} 検索エラー:`, e.message);
-    }
-  }
-
-  // source=all の場合は date 降順でマージ
-  allResults.sort((a, b) => {
-    if (a.date > b.date) return -1;
-    if (a.date < b.date) return 1;
-    return 0;
-  });
-
-  const results = allResults.slice(0, limit);
-
-  res.json({
-    results,
-    total: allResults.length,
-    query: q || '',
-  });
 });
 
 const PORT = process.env.PORT || 8080;

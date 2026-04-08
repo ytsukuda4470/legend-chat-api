@@ -69,11 +69,18 @@
       </div>
     </div>
 
-    <!-- ソースタブ -->
-    <div class="flex gap-6 mb-5 border-b border-gray-200">
-      <button class="tab-btn tab-active pb-2 text-sm font-medium" data-source="all">すべて</button>
-      <button class="tab-btn tab-inactive pb-2 text-sm font-medium" data-source="wam">WAM NET</button>
-      <button class="tab-btn tab-inactive pb-2 text-sm font-medium" data-source="mhlw">厚労省議事録</button>
+    <!-- ソースタブ + ソート -->
+    <div class="flex items-center justify-between mb-5 border-b border-gray-200">
+      <div class="flex gap-6">
+        <button class="tab-btn tab-active pb-2 text-sm font-medium" data-source="all">すべて</button>
+        <button class="tab-btn tab-inactive pb-2 text-sm font-medium" data-source="wam">WAM NET</button>
+        <button class="tab-btn tab-inactive pb-2 text-sm font-medium" data-source="mhlw">厚労省議事録</button>
+      </div>
+      <select id="sortSelect" class="mb-1 text-xs border border-gray-300 rounded px-2 py-1 text-gray-600 focus:outline-none focus:border-primary">
+        <option value="relevance">関連度順</option>
+        <option value="date_desc">新しい順</option>
+        <option value="date_asc">古い順</option>
+      </select>
     </div>
 
     <!-- 結果エリア -->
@@ -106,6 +113,7 @@
     // ==============================
 
     let currentSource = 'all';
+    let currentSort = 'relevance';
     let currentOffset = 0;
     let currentTotal = 0;
     let currentQuery = '';
@@ -117,6 +125,7 @@
     const prevBtn = document.getElementById('prevBtn');
     const nextBtn = document.getElementById('nextBtn');
     const pageInfoEl = document.getElementById('pageInfo');
+    const sortSelect = document.getElementById('sortSelect');
 
     // タブ切替
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -126,11 +135,13 @@
         });
         btn.className = btn.className.replace('tab-inactive', 'tab-active');
         currentSource = btn.dataset.source;
-        if (searchInput.value.trim()) {
-          currentOffset = 0;
-          search();
-        }
+        if (searchInput.value.trim()) { currentOffset = 0; search(); }
       });
+    });
+
+    sortSelect.addEventListener('change', () => {
+      currentSort = sortSelect.value;
+      if (searchInput.value.trim()) { currentOffset = 0; search(); }
     });
 
     searchBtn.addEventListener('click', () => { currentOffset = 0; search(); });
@@ -151,7 +162,7 @@
       paginationEl.classList.add('hidden');
 
       try {
-        const params = new URLSearchParams({ q, source: currentSource, limit: LIMIT, offset: currentOffset });
+        const params = new URLSearchParams({ q, source: currentSource, sort: currentSort, limit: LIMIT, offset: currentOffset });
         const res = await fetch(`${API_BASE}/api/search?${params}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
