@@ -54,6 +54,11 @@ app.get('/knowledge', (req, res) => {
   res.sendFile(path.join(__dirname, '../chat-widget/knowledge.html'));
 });
 
+// Webhook管理UI
+app.get('/webhooks', (req, res) => {
+  res.sendFile(path.join(__dirname, '../chat-widget/webhooks.html'));
+});
+
 // キーワード抽出（Gemini）
 async function extractKeywords(question) {
   const prompt = `以下の介護・ケアマネジャー関連の質問から、Firestoreの全文検索に使用するキーワードを3〜5個抽出してください。\nキーワードはJSON配列形式で返してください。例: [\"訪問介護\", \"特定事業所加算\", \"人員基準\"]\n\n質問: ${question}\n\nキーワードのみJSON配列で返答してください（説明不要）:`;
@@ -169,6 +174,126 @@ async function generateAnswer(question, documents) {
     throw e;
   }
 }
+
+// ==============================
+// Webhook管理API
+// ==============================
+
+// GET /api/webhooks — 全件取得
+app.get('/api/webhooks', async (req, res) => {
+  try {
+    const snapshot = await db.collection('chat_webhooks').orderBy('created_at', 'desc').get();
+    const webhooks = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+    res.json(webhooks);
+  } catch (e) {
+    console.error('Webhook取得エラー:', e);
+    res.status(500).json({ error: 'Webhookの取得に失敗しました', detail: e.message });
+  }
+});
+
+// POST /api/webhooks — 新規登録
+app.post('/api/webhooks', async (req, res) => {
+  const { name, webhook_url, content_types, enabled } = req.body;
+
+  if (!name || typeof name !== 'string' || name.trim() === '') {
+    return res.status(400).json({ error: 'name は必須です' });
+  }
+  if (!webhook_url || typeof webhook_url !== 'string' || !webhook_url.startsWith('https://chat.googleapis.com/')) {
+    return res.status(400).json({ error: 'webhook_url は https://chat.googleapis.com/ で始まる必要があります' });
+  }
+
+  try {
+    const data = {
+      name: name.trim(),
+      webhook_url,
+      content_types: Array.isArray(content_types) ? content_types : [],
+      enabled: typeof enabled === 'boolean' ? enabled : true,
+      created_at: new Date().toISOString(),
+    };
+    const docRef = await db.collection('chat_webhooks').add(data);
+    res.status(201).json({ id: docRef.id, ...data });
+  } catch (e) {
+    console.error('Webhook登録エラー:', e);
+    res.status(500).json({ error: 'Webhookの登録に失敗しました', detail: e.message });
+  }
+});
+
+// PUT /api/webhooks/:id — 更新
+app.put('/api/webhooks/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, webhook_url, content_types, enabled } = req.body;
+
+  if (webhook_url !== undefined && (typeof webhook_url !== 'string' || !webhook_url.startsWith('https://chat.googleapis.com/'))) {
+    return res.status(400).json({ error: 'webhook_url は https://chat.googleapis.com/ で始まる必要があります' });
+  }
+
+  const updates = {};
+  if (name !== undefined) updates.name = String(name).trim();
+  if (webhook_url !== undefined) updates.webhook_url = webhook_url;
+  if (content_types !== undefined) updates.content_types = Array.isArray(content_types) ? content_types : [];
+  if (enabled !== undefined) updates.enabled = Boolean(enabled);
+
+  try {
+    const docRef = db.collection('chat_webhooks').doc(id);
+    const doc = await docRef.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: '指定されたWebhookが見つかりません' });
+    }
+    await docRef.update(updates);
+    res.json({ id, ...doc.data(), ...updates });
+  } catch (e) {
+    console.error('Webhook更新エラー:', e);
+    res.status(500).json({ error: 'Webhookの更新に失敗しました', detail: e.message });
+  }
+});
+
+// DELETE /api/webhooks/:id — 削除
+app.delete('/api/webhooks/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const docRef = db.collection('chat_webhooks').doc(id);
+    const doc = await docRef.get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: '指定されたWebhookが見つかりません' });
+    }
+    await docRef.delete();
+    res.json({ success: true, id });
+  } catch (e) {
+    console.error('Webhook削除エラー:', e);
+    res.status(500).json({ error: 'Webhookの削除に失敗しました', detail: e.message });
+  }
+});
+
+// POST /api/webhooks/:id/test — テスト送信
+app.post('/api/webhooks/:id/test', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const doc = await db.collection('chat_webhooks').doc(id).get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: '指定されたWebhookが見つかりません' });
+    }
+    const { webhook_url, name } = doc.data();
+
+    const response = await fetch(webhook_url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: '✅ レジェンドケアマネからのテスト送信です' }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return res.status(502).json({ error: 'Webhookへの送信に失敗しました', detail: errorText });
+    }
+
+    res.json({ success: true, message: `「${name}」へのテスト送信が完了しました` });
+  } catch (e) {
+    console.error('Webhookテスト送信エラー:', e);
+    res.status(500).json({ error: 'テスト送信中にエラーが発生しました', detail: e.message });
+  }
+});
 
 // GET /api/search?q=...&source=all|wam|mhlw&sort=date_desc|date_asc|relevance&limit=20&offset=0
 app.get('/api/search', async (req, res) => {
