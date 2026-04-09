@@ -58,3 +58,40 @@ gcloud run deploy legend-chat-api \
   --region=asia-northeast1 \
   --project=tougou-db-f9f9e
 ```
+
+---
+
+## デザインシステム（改修前に必ず確認）
+
+**UIコンポーネントを変更・追加する前に必ずdesign-MCPに相談すること。**
+
+### このアプリのデザイン登録情報
+
+| 項目 | 値 |
+|---|---|
+| アプリ番号 | No.15 |
+| プライマリカラー | `未登録（次回 create_app_design で発行）` |
+| アイコンファイル | `15-chat-ai.svg` |
+| デザイン管理リポジトリ | `279-design-management/brand-assets/icons/` |
+
+### 改修前の必須手順
+
+```bash
+# 1. デザインポリシー確認（カラー・タイポ・コンポーネントルール）
+→ design-MCP: get_design_policy
+
+# 2. このアプリのCSS変数を取得
+→ design-MCP: create_app_design appName="介護制度AIチャット"
+
+# 3. 実装チェックリスト確認
+→ design-MCP: get_implementation_checklist
+```
+
+### 共通デザインルール（全アプリ統一）
+
+- フォント: Noto Sans JP（Google Fonts）
+- サイドバー幅: 240px（PC固定）、モバイルはハンバーガー
+- ヘッダー高さ: 48px、フォントサイズ最小: 13px
+- テーブルヘッダー: `#238e3a`（コーポレートグリーン）
+- アクセント: `#febe0f`（イエロー）
+- 削除操作: 必ず確認ダイアログを実装
