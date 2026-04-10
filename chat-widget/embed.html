@@ -196,7 +196,7 @@
     </div>
   </div>
   <div id="input-area">
-    <textarea id="input" placeholder="質問を入力（Shift+Enterで改行）" rows="1"></textarea>
+    <textarea id="input" placeholder="質問を入力（Shift+Enterで送信・Enterで改行）" rows="1"></textarea>
     <button id="send-btn" title="送信">➤</button>
   </div>
 
@@ -299,35 +299,115 @@
       addUserMessage(question);
       const loadingEl = showLoading();
 
+      const finish = () => {
+        sendBtn.disabled = false;
+        inputEl.focus();
+      };
+
       try {
         const res = await fetch(API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question }),
+          body: JSON.stringify({ message: question }),
         });
-        const data = await res.json();
-        loadingEl.remove();
 
-        if (data.error) {
-          addErrorMessage(`エラー: ${data.error}`);
-        } else {
-          addAiMessage(data.answer, data.sources);
+        if (!res.ok || !res.body) {
+          if (loadingEl.parentNode) loadingEl.remove();
+          addErrorMessage('サーバーエラーが発生しました。しばらくしてから再試行してください。');
+          finish();
+          return;
         }
-      } catch (e) {
-        loadingEl.remove();
-        addErrorMessage('ネットワークエラーが発生しました。しばらくしてから再試行してください。');
-      }
 
-      sendBtn.disabled = false;
-      inputEl.focus();
+        // ストリーミング受信
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let aiWrapper = null;
+        let textDiv = null;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop();
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            let event;
+            try { event = JSON.parse(line.slice(6)); } catch { continue; }
+
+            if (event.type === 'text') {
+              if (!aiWrapper) {
+                if (loadingEl.parentNode) loadingEl.remove();
+                aiWrapper = document.createElement('div');
+                aiWrapper.className = 'msg msg-ai';
+                textDiv = document.createElement('div');
+                textDiv.className = 'answer-text';
+                aiWrapper.appendChild(textDiv);
+                messagesEl.appendChild(aiWrapper);
+              }
+              textDiv.textContent += event.text;
+              scrollToBottom();
+
+            } else if (event.type === 'done') {
+              if (loadingEl.parentNode) loadingEl.remove();
+              if (event.sources && event.sources.length > 0 && aiWrapper) {
+                const label = document.createElement('div');
+                label.className = 'sources-label';
+                label.textContent = `参考資料 (${event.sources.length}件)`;
+                aiWrapper.appendChild(label);
+
+                event.sources.forEach(src => {
+                  const card = document.createElement('div');
+                  card.className = 'source-card';
+                  const titleDiv = document.createElement('div');
+                  titleDiv.className = 'source-title';
+                  const titleText = src.title + (src.vol ? ` Vol.${src.vol}` : '');
+                  if (src.url) {
+                    const a = document.createElement('a');
+                    a.href = src.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+                    a.textContent = titleText;
+                    titleDiv.appendChild(a);
+                  } else {
+                    titleDiv.textContent = titleText;
+                  }
+                  card.appendChild(titleDiv);
+                  aiWrapper.appendChild(card);
+                });
+                scrollToBottom();
+              }
+              finish();
+
+            } else if (event.type === 'error') {
+              if (loadingEl.parentNode) loadingEl.remove();
+              addErrorMessage(event.error);
+              finish();
+            }
+          }
+        }
+
+        // done イベントなしでストリームが終了した場合の保険
+        if (sendBtn.disabled) finish();
+
+      } catch (e) {
+        if (loadingEl.parentNode) loadingEl.remove();
+        addErrorMessage('ネットワークエラーが発生しました。しばらくしてから再試行してください。');
+        finish();
+      }
     }
 
     sendBtn.addEventListener('click', sendMessage);
 
     inputEl.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
+      if (e.key === 'Enter') {
+        if (e.shiftKey) {
+          // Shift+Enter → 送信
+          e.preventDefault();
+          sendMessage();
+        }
+        // 単独Enter → 改行（デフォルト動作のまま）
       }
     });
 

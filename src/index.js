@@ -21,6 +21,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
 const app = express();
+app.set('trust proxy', 1); // Cloud Run はプロキシ経由のためX-Forwarded-Forを信頼する
 app.use(cors());
 app.use(express.json());
 
@@ -297,6 +298,98 @@ app.post('/api/webhooks/:id/test', async (req, res) => {
   } catch (e) {
     console.error('Webhookテスト送信エラー:', e);
     res.status(500).json({ error: 'テスト送信中にエラーが発生しました', detail: e.message });
+  }
+});
+
+// Google Chat Webhook に全文送信
+async function notifyGoogleChat(question, answer, sources) {
+  try {
+    const snapshot = await db.collection('chat_webhooks')
+      .where('enabled', '==', true)
+      .get();
+    if (snapshot.empty) return;
+
+    const sourceText = sources.length > 0
+      ? '\n\n📚 *参考資料*\n' + sources.map(s => `• ${s.title}${s.vol ? ` Vol.${s.vol}` : ''}${s.url ? `\n  ${s.url}` : ''}`).join('\n')
+      : '';
+
+    const text = `💬 *質問*\n${question}\n\n🤖 *回答*\n${answer}${sourceText}`;
+
+    await Promise.allSettled(
+      snapshot.docs.map(doc => {
+        const { webhook_url } = doc.data();
+        return fetch(webhook_url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        });
+      })
+    );
+  } catch (e) {
+    console.error('[legend-chat] Google Chat通知エラー:', e.message);
+  }
+}
+
+// POST /api/chat — チャット回答生成（RAGストリーミング）
+app.post('/api/chat', async (req, res) => {
+  const { message } = req.body;
+
+  if (!message || typeof message !== 'string' || message.trim().length === 0) {
+    return res.status(400).json({ error: 'message は必須です' });
+  }
+
+  // SSE ヘッダー
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+
+  try {
+    // キーワード抽出（Gemini不使用・高速化）
+    const keywords = message.split(/[\s　、。？！]+/).filter(k => k.length >= 2).slice(0, 8);
+
+    // Firestore検索
+    const documents = await searchDocuments(keywords);
+    const sources = documents.map(doc => ({ title: doc.title, url: doc.url, vol: doc.vol }));
+
+    // プロンプト生成
+    let context = '';
+    if (documents.length > 0) {
+      context = documents.map((doc, i) => {
+        const keyPoints = Array.isArray(doc.key_points) ? doc.key_points.join('\n- ') : '';
+        return `【資料${i + 1}】${doc.title}${doc.vol ? ` (Vol.${doc.vol})` : ''}\n概要: ${doc.summary}\n${keyPoints ? `ポイント:\n- ${keyPoints}` : ''}`;
+      }).join('\n\n');
+    }
+    const prompt = context
+      ? `あなたは介護保険制度に詳しいケアマネジャー支援AIです。以下の参考資料をもとに、質問に対して正確かつわかりやすく回答してください。\n\n参考資料:\n${context}\n\n質問: ${message}\n\n回答（400字程度、箇条書き可）:`
+      : `あなたは介護保険制度に詳しいケアマネジャー支援AIです。以下の質問に対して、一般的な知識に基づいて回答してください。\n\n質問: ${message}\n\n回答（400字程度）:`;
+
+    // Gemini ストリーミング
+    const result = await model.generateContentStream(prompt);
+    let fullAnswer = '';
+
+    for await (const chunk of result.stream) {
+      const text = chunk.text();
+      if (text) {
+        fullAnswer += text;
+        send({ type: 'text', text });
+      }
+    }
+
+    // 完了通知（sources含む）
+    send({ type: 'done', sources });
+    res.end();
+
+    // Google Chat Webhook に非同期送信
+    notifyGoogleChat(message, fullAnswer, sources);
+
+  } catch (e) {
+    console.error('[legend-chat] /api/chat エラー:', e);
+    send({ type: 'error', error: 'AIサービスに一時的な問題が発生しました。しばらく待ってから再試行してください。' });
+    res.end();
   }
 });
 

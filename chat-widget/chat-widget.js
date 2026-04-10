@@ -322,7 +322,7 @@
       const res = await fetch(`${API_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ message: question }),
       });
       const data = await res.json();
       loadingEl.remove();
