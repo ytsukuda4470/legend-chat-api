@@ -554,6 +554,90 @@ app.get('/api/search', async (req, res) => {
   }
 });
 
+// ========================
+// チャットフィードバック保存（Phase 2 連携）
+// ========================
+app.post('/api/chat-feedback', async (req, res) => {
+  try {
+    const { message_id, tool_call_id, rating, reason, session_id } = req.body || {};
+    if (!message_id || !rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ error: 'message_id と rating(1-5) は必須です' });
+    }
+    await db.collection('tool_feedback').add({
+      tool_call_id: tool_call_id || '',
+      tool_name: 'legend-chat',
+      rating: Number(rating),
+      reason: reason || '',
+      source: 'chat-widget',
+      session_id: session_id || '',
+      user_email_hash: '',
+      region: 'unknown',
+      hokensha_code: '',
+      expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      timestamp: new Date(),
+    });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('chat-feedback error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ========================
+// 学習状況サマリー API（ウィジェット学習パネル用）
+// ========================
+app.get('/api/insights-summary', async (req, res) => {
+  try {
+    // 直近7日分の日次サマリを取得
+    const today = new Date();
+    const dates = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      return d.toISOString().slice(0, 10);
+    });
+
+    const snaps = await Promise.all(
+      dates.map(date => db.collection('tool_insights').doc(`daily/${date}`).get())
+    );
+
+    const validDocs = snaps.filter(s => s.exists).map(s => s.data());
+    if (validDocs.length === 0) {
+      return res.json({ summary: null });
+    }
+
+    // 直近1日の集計
+    const latest = validDocs[0];
+    const toolStats = latest.tool_stats || {};
+    const topTools = Object.entries(toolStats)
+      .sort(([, a], [, b]) => (b.count || 0) - (a.count || 0))
+      .slice(0, 3);
+
+    const totalCalls = validDocs.reduce((s, d) => s + (d.total_calls || 0), 0);
+
+    const toolLabels = {
+      assess_needs: 'アセスメント支援',
+      draft_careplan: 'ケアプラン作成',
+      consult_legend: 'レジェンド相談',
+      lookup_regulation: '法令検索',
+      support_intake: 'インテーク支援',
+    };
+
+    const topHtml = topTools.map(([name, stat]) => {
+      const label = toolLabels[name] || name;
+      return `<span style="margin-right:8px">• ${label}（${stat.count}回）</span>`;
+    }).join('');
+
+    const summary = `<b>直近7日間: ${totalCalls.toLocaleString()}回の質問に回答</b><br>` +
+      `よく使われた機能: ${topHtml}<br>` +
+      `<span style="color:#64748b;font-size:11px">📍 対応エリア: 札幌・いわき・神奈川県西部・京都</span>`;
+
+    res.json({ summary });
+  } catch (e) {
+    console.error('insights-summary error:', e.message);
+    res.json({ summary: null });
+  }
+});
+
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`legend-chat-api listening on port ${PORT}`);

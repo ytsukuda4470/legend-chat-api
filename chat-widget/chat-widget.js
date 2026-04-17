@@ -188,6 +188,66 @@
     }
     #legend-chat-send:hover { background: #1d4ed8; }
     #legend-chat-send:disabled { background: #93c5fd; cursor: not-allowed; }
+    /* フィードバックボタン */
+    .legend-feedback-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+    .legend-feedback-btn {
+      background: none;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 3px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      color: #64748b;
+      transition: all 0.15s;
+    }
+    .legend-feedback-btn:hover { background: #f1f5f9; border-color: #94a3b8; }
+    .legend-feedback-btn.good:hover { background: #dcfce7; border-color: #86efac; color: #166534; }
+    .legend-feedback-btn.bad:hover  { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+    .legend-feedback-btn.selected-good { background: #dcfce7; border-color: #86efac; color: #166534; }
+    .legend-feedback-btn.selected-bad  { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+    .legend-feedback-reasons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 6px;
+    }
+    .legend-reason-btn {
+      background: #fff7ed;
+      border: 1px solid #fed7aa;
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 11px;
+      cursor: pointer;
+      color: #9a3412;
+    }
+    .legend-reason-btn:hover { background: #ffedd5; }
+    /* 学習状況ボタン */
+    #legend-insights-btn {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.8);
+      cursor: pointer;
+      font-size: 16px;
+      padding: 0 4px;
+    }
+    #legend-insights-btn:hover { color: white; }
+    #legend-insights-panel {
+      padding: 14px 16px;
+      background: #f8fafc;
+      border-top: 1px solid #e2e8f0;
+      font-size: 12px;
+      display: none;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    #legend-insights-panel.visible { display: block; }
+    .legend-insights-title { font-weight: 700; color: #1a6b8a; margin-bottom: 8px; }
+    .legend-insights-item { color: #374151; line-height: 1.6; }
     @media (max-width: 480px) {
       #legend-chat-panel {
         width: calc(100vw - 16px);
@@ -218,7 +278,14 @@
         <h3>介護制度 AIアシスタント</h3>
         <span>レジェンドケアマネ powered by Gemini</span>
       </div>
-      <button id="legend-chat-close">✕</button>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button id="legend-insights-btn" title="学習状況を確認">📊</button>
+        <button id="legend-chat-close">✕</button>
+      </div>
+    </div>
+    <div id="legend-insights-panel">
+      <div class="legend-insights-title">📊 このAIの学習状況</div>
+      <div class="legend-insights-item" id="legend-insights-content">読み込み中...</div>
     </div>
     <div id="legend-chat-messages">
       <div class="legend-msg legend-msg-ai">こんにちは！介護保険制度や加算・算定要件についてご質問ください。最新の通知・審議会資料をもとに回答します。</div>
@@ -237,6 +304,12 @@
   const inputEl = document.getElementById('legend-chat-input');
   const sendBtn = document.getElementById('legend-chat-send');
   const closeBtn = document.getElementById('legend-chat-close');
+  const insightsBtn = document.getElementById('legend-insights-btn');
+  const insightsPanel = document.getElementById('legend-insights-panel');
+  const insightsContent = document.getElementById('legend-insights-content');
+
+  // セッションID（タブ起動毎に生成）
+  const SESSION_ID = 'sess-' + Date.now().toString(36);
 
   // パネル開閉
   btn.addEventListener('click', () => {
@@ -246,6 +319,24 @@
     }
   });
   closeBtn.addEventListener('click', () => panel.classList.add('hidden'));
+
+  // 学習状況パネル開閉
+  insightsBtn.addEventListener('click', async () => {
+    const visible = insightsPanel.classList.toggle('visible');
+    if (visible && insightsContent.textContent === '読み込み中...') {
+      try {
+        const res = await fetch(`${API_URL}/api/insights-summary`);
+        const data = await res.json();
+        if (data.summary) {
+          insightsContent.innerHTML = data.summary;
+        } else {
+          insightsContent.textContent = 'データ収集中です（利用開始から数日後に表示されます）';
+        }
+      } catch {
+        insightsContent.textContent = '取得できませんでした。';
+      }
+    }
+  });
 
   // メッセージ追加
   function addMessage(type, content) {
@@ -273,6 +364,7 @@
 
   // AIメッセージ（引用元付き）
   function addAiMessage(answer, sources) {
+    const msgId = 'msg-' + Date.now().toString(36);
     const wrapper = document.createElement('div');
 
     const textDiv = document.createElement('div');
@@ -304,6 +396,73 @@
     }
 
     addMessage('ai', wrapper);
+
+    // フィードバックボタン追加
+    addFeedbackRow(msgId);
+  }
+
+  const FEEDBACK_REASONS = ['情報が古い', '業務に合わない', '制度理解が誤り', '地域が違う', '回答が不明瞭', 'その他'];
+
+  function addFeedbackRow(msgId) {
+    const row = document.createElement('div');
+    row.className = 'legend-feedback-row';
+    row.dataset.msgId = msgId;
+
+    const goodBtn = document.createElement('button');
+    goodBtn.className = 'legend-feedback-btn good';
+    goodBtn.textContent = '👍 役立った';
+
+    const badBtn = document.createElement('button');
+    badBtn.className = 'legend-feedback-btn bad';
+    badBtn.textContent = '👎 改善希望';
+
+    goodBtn.addEventListener('click', () => {
+      submitFeedback(msgId, 5, null);
+      goodBtn.classList.add('selected-good');
+      badBtn.disabled = true;
+      goodBtn.disabled = true;
+      // 理由行を閉じる
+      const reasonsEl = row.querySelector('.legend-feedback-reasons');
+      if (reasonsEl) reasonsEl.remove();
+    });
+
+    badBtn.addEventListener('click', () => {
+      badBtn.classList.add('selected-bad');
+      goodBtn.disabled = true;
+      // 理由選択を表示
+      let reasonsEl = row.querySelector('.legend-feedback-reasons');
+      if (!reasonsEl) {
+        reasonsEl = document.createElement('div');
+        reasonsEl.className = 'legend-feedback-reasons';
+        FEEDBACK_REASONS.forEach(reason => {
+          const rb = document.createElement('button');
+          rb.className = 'legend-reason-btn';
+          rb.textContent = reason;
+          rb.addEventListener('click', () => {
+            submitFeedback(msgId, 1, reason);
+            badBtn.disabled = true;
+            reasonsEl.remove();
+          });
+          reasonsEl.appendChild(rb);
+        });
+        row.appendChild(reasonsEl);
+      }
+    });
+
+    row.appendChild(goodBtn);
+    row.appendChild(badBtn);
+    messagesEl.appendChild(row);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  async function submitFeedback(msgId, rating, reason) {
+    try {
+      await fetch(`${API_URL}/api/chat-feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message_id: msgId, tool_call_id: '', rating, reason: reason || '', session_id: SESSION_ID }),
+      });
+    } catch { /* フィードバック失敗はサイレントに */ }
   }
 
   // 送信処理
