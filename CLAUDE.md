@@ -1,3 +1,7 @@
+@~/.claude/shared/APP_BASE.md
+
+---
+
 # 介護制度AIチャットボット（legend-chat-api）プロジェクトルール
 
 ## 概要
@@ -95,3 +99,9 @@ gcloud run deploy legend-chat-api \
 - テーブルヘッダー: `#238e3a`（コーポレートグリーン）
 - アクセント: `#febe0f`（イエロー）
 - 削除操作: 必ず確認ダイアログを実装
+
+## ⚠️ 一部レガシー技術の移行を検討
+このアプリはNode.js + Expressを使用しています。
+改修のタイミングで以下を検討してください：
+- Express API → Next.js API Routes or Cloud Run直接
+- 参照: 279推奨スタック https://279-dev-dashboard.web.app (技術標準タブ)
