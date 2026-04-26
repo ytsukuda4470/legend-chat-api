@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <defs>
+    <radialGradient id="vg-legend-cm-32" cx="28%" cy="22%" r="78%">
+      <stop offset="0%" stop-color="white" stop-opacity="0.34"/>
+      <stop offset="38%" stop-color="white" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="white" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="0" y="0" width="32" height="32" rx="7.17" ry="7.17" fill="#1a6b8a"/>
+  <rect x="0" y="0" width="32" height="32" rx="7.17" ry="7.17" fill="url(#vg-legend-cm-32)"/>
+  <rect x="0.5" y="0.5" width="31" height="31" rx="6.67" ry="6.67" fill="none" stroke="rgba(26,107,138,0.2)" stroke-width="1"/>
+  <g transform="translate(7.040, 7.040) scale(0.74667)">
+    <g fill="none" stroke="white" stroke-width="2.1429" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 5.5 C 7 5.5 5.5 7 5.5 9 C 5.5 10 5.8 11 6.3 11.7 C 5.8 12.4 5.5 13.3 5.5 14.3 C 5.5 16.3 7 17.8 9 17.8 L 9 19.5 L 11.5 19.5 L 11.5 5"></path>
+<path d="M15 5.5 C 17 5.5 18.5 7 18.5 9 C 18.5 10 18.2 11 17.7 11.7 C 18.2 12.4 18.5 13.3 18.5 14.3 C 18.5 16.3 17 17.8 15 17.8 L 15 19.5 L 12.5 19.5 L 12.5 5"></path>
+<line x1="7" y1="9" x2="9" y2="9"></line>
+<line x1="7" y1="13" x2="9" y2="13"></line>
+<line x1="15" y1="9" x2="17" y2="9"></line>
+<line x1="15" y1="13" x2="17" y2="13"></line>
+<circle cx="6.5" cy="9" r="0.5" fill="white" stroke="none"></circle>
+<circle cx="6.5" cy="13" r="0.5" fill="white" stroke="none"></circle>
+<circle cx="17.5" cy="9" r="0.5" fill="white" stroke="none"></circle>
+<circle cx="17.5" cy="13" r="0.5" fill="white" stroke="none"></circle>
+    </g>
+  </g>
+</svg>
