@@ -4,6 +4,16 @@
 
 # 介護制度AIチャットボット（legend-chat-api）プロジェクトルール
 
+## アプリ間連携設定
+
+handoff-id: legend-chat
+
+このIDは ytsukuda4470/279-app-handoffs（中央受信箱）で他アプリと連携するための識別子です。
+変更しないこと。
+
+他アプリへの依頼は `gh issue create --repo ytsukuda4470/279-app-handoffs --label "to:相手id,from:legend-chat"` で送る。
+自分宛Issueの確認は `gh issue list --repo ytsukuda4470/279-app-handoffs --label "to:legend-chat" --state open` で行う。
+
 ## 概要
 業務ポータル向けチャットウィジェット + Cloud Run APIバックエンド。
 他サイトへ埋め込んで使うため、CORS・セキュリティ設定は特に慎重に。
