@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ログイン — 介護制度AIチャットボット</title>
+  <script src="https://design.279agent.jp/v4/components/_base.js?v=20260503"></script>
+  <script src="https://design.279agent.jp/v4/components/login.js?v=20260503"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const el = document.querySelector('two79-login');
+      if (el) {
+        el.addEventListener('signin', () => {
+          // Firebase Auth with Google
+          import('https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js').then(({ getAuth, signInWithPopup, GoogleAuthProvider }) => {
+            const auth = getAuth();
+            signInWithPopup(auth, new GoogleAuthProvider())
+              .then(() => { window.location.href = '/'; })
+              .catch(err => console.error(err));
+          });
+        });
+      }
+    });
+  </script>
+</head>
+<body>
+  <two79-login app="legend-chat"></two79-login>
+</body>
+</html>
